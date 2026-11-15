@@ -64,6 +64,7 @@
     <div class="heading">FocusBoard VR</div>
     <div class="body">A calm seated desk for one thing at a time.</div>
     <div class="body">Pinch a note, park a thought, get back to work.</div>
+  <div class="body">Sign in once on this headset's browser and your notes keep their desk spots between sessions.</div>
   </div>
   <Button id="xr-button" class="button">
     <ButtonIcon>

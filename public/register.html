@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create account · FocusBoard VR</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="wrap" style="max-width:460px">
+  <div class="eyebrow">HANDS-FIRST FOCUS DESK</div>
+  <h1>Create account</h1>
+  <p class="sub">Your board, your notes, saved for your next session.</p>
+  <div class="card">
+    <form id="f">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" autocomplete="name" maxlength="80" required>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <label for="password">Password (8+ characters)</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      <div class="row" style="margin-top:18px">
+        <button type="submit" id="go" style="flex:1">Create account</button>
+      </div>
+      <div id="msg" class="msg" role="alert"></div>
+    </form>
+  </div>
+  <p class="foot">Already registered? <a href="login.html">Sign in</a> · <a href="privacy.html">Privacy</a></p>
+</div>
+<script src="app.js"></script>
+<script>
+loadConfig().then(() => {
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const m = document.getElementById('msg'), b = document.getElementById('go');
+    b.disabled = true; msg(m, 'Creating account…', 'ok');
+    try {
+      const r = await api('/api/auth/register', { method: 'POST', body: JSON.stringify({
+        name: document.getElementById('name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('password').value }) });
+      saveToken(r.token); location.href = 'board.html';
+    } catch (err) { msg(m, err.message, 'err'); b.disabled = false; }
+  });
+});
+</script>
+</body>
+</html>

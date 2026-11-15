@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your board · FocusBoard VR</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="eyebrow">HANDS-FIRST FOCUS DESK</div>
+      <h1>Your board</h1>
+    </div>
+    <div class="row">
+      <span id="who" class="chip"></span>
+      <button class="ghost" id="export">Export</button>
+      <button class="danger" id="delacct">Delete account</button>
+      <button class="ghost" id="logout">Sign out</button>
+    </div>
+  </div>
+  <div class="card">
+    <form id="add">
+      <div class="row">
+        <div class="grow"><label for="text">New note (what is the one thing?)</label>
+          <input id="text" name="text" type="text" maxlength="140" placeholder="e.g. Ship the demo" required></div>
+        <div><label for="color">Color</label>
+          <select id="color" name="color">
+            <option value="amber">Amber</option><option value="sage">Sage</option>
+            <option value="sky">Sky</option><option value="rose">Rose</option>
+          </select></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button type="submit" id="go">Pin it to the board</button>
+        <span class="chip">Notes appear on your desk in VR at their saved spot.</span>
+      </div>
+    </form>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="msg" class="msg" role="alert"></div>
+  <p class="foot"><a href="privacy.html">Privacy</a> · <a href="about.html">About</a> · FocusBoard VR, made by <a href="https://shlok.is-a.dev">Shlok V.</a></p>
+</div>
+<script src="app.js"></script>
+<script>
+let notes = [];
+loadConfig().then(load).catch(err => msg(document.getElementById('msg'), err.message, 'err'));
+
+async function load() {
+  const m = document.getElementById('msg');
+  if (!token()) { location.href = 'login.html?next=' + encodeURIComponent(location.pathname.split('/').pop()); return; }
+  try {
+    const me = await api('/api/auth/me');
+    document.getElementById('who').textContent = me.user.name + ' · ' + me.user.email;
+    notes = (await api('/api/notes')).notes;
+    render();
+  } catch (err) { msg(m, err.message, 'err'); }
+}
+
+function render() {
+  const g = document.getElementById('grid'); g.innerHTML = '';
+  if (!notes.length) { g.outerHTML = '<p class="sub" id="grid">No notes yet. Pin your first thought above.</p>'; return; }
+  for (const n of notes) {
+    const d = document.createElement('div');
+    d.className = 'note ' + n.color;
+    const where = 'x ' + n.pos_x.toFixed(2) + ' · y ' + n.pos_y.toFixed(2) + ' · z ' + n.pos_z.toFixed(2);
+    d.innerHTML = '<div class="txt"></div><div class="meta"><span>' + (COLORS[n.color] || n.color) + ' · ' + where + '</span><span>' +
+      '<button class="ghost" data-move="' + n.id + '">Save desk spot</button> <button data-del="' + n.id + '">Delete</button></span></div>';
+    d.querySelector('.txt').textContent = n.text || '(empty note)';
+    g.appendChild(d);
+  }
+}
+
+document.getElementById('add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const m = document.getElementById('msg'), b = document.getElementById('go');
+  b.disabled = true;
+  try {
+    await api('/api/notes', { method: 'POST', body: JSON.stringify({
+      text: document.getElementById('text').value.trim(),
+      color: document.getElementById('color').value }) });
+    document.getElementById('text').value = '';
+    notes = (await api('/api/notes')).notes; render(); msg(m, '', '');
+  } catch (err) { msg(m, err.message, 'err'); } finally { b.disabled = false; }
+});
+
+document.getElementById('grid').addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-del]'), mv = e.target.closest('[data-move]');
+  const m = document.getElementById('msg');
+  if (del) {
+    try { await api('/api/notes/' + del.dataset.del, { method: 'DELETE' });
+      notes = notes.filter(n => n.id !== del.dataset.del); render();
+    } catch (err) { msg(m, err.message, 'err'); }
+  }
+  if (mv) {
+    const n = notes.find(x => x.id === mv.dataset.move); if (!n) return;
+    const px = prompt('Desk spot for "' + (n.text || 'note') + '"\nposition x y z (meters from your seat, e.g. -0.2 1.0 -0.4):',
+      n.pos_x + ' ' + n.pos_y + ' ' + n.pos_z);
+    if (px == null) return;
+    const parts = px.trim().split(/\s+/).map(Number);
+    if (parts.length !== 3 || parts.some(v => Number.isNaN(v))) { msg(m, 'Enter three numbers: x y z.', 'err'); return; }
+    const ry = prompt('Rotation around Y in degrees (0-360):', String(n.rot_y));
+    if (ry == null) return;
+    try {
+      await api('/api/notes/' + n.id, { method: 'PUT', body: JSON.stringify({ x: parts[0], y: parts[1], z: parts[2], rot_y: Number(ry) || 0 }) });
+      notes = (await api('/api/notes')).notes; render(); msg(m, '', '');
+    } catch (err) { msg(m, err.message, 'err'); }
+  }
+});
+
+document.getElementById('export').addEventListener('click', async () => {
+  const m = document.getElementById('msg');
+  try {
+    const d = await api('/api/auth/export');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
+    a.download = 'focusboard-notes.json'; a.click(); URL.revokeObjectURL(a.href);
+  } catch (err) { msg(m, err.message, 'err'); }
+});
+
+document.getElementById('logout').addEventListener('click', () => {
+  saveToken(''); location.href = 'login.html';
+});
+
+document.getElementById('delacct').addEventListener('click', async () => {
+  const m = document.getElementById('msg');
+  if (!confirm('Delete your account and every note permanently? This cannot be undone.')) return;
+  try { await api('/api/auth/me', { method: 'DELETE' }); saveToken(''); location.href = 'login.html?deleted=1'; }
+  catch (err) { msg(m, err.message, 'err'); }
+});
+</script>
+</body>
+</html>
